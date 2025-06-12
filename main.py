@@ -16,7 +16,6 @@ def get_text_length(text: str) -> int:
     )  # stripping any non alphabetic characters just in case
     return len(text)
 
-
 if __name__ == "__main__":
     print("Hello ReAct LangChain!")
     tools = [get_text_length]
@@ -50,5 +49,13 @@ if __name__ == "__main__":
     )  # we need the render_text_description because we cannot put tool objects in llm, we need strings of our tools
 
     llm = ChatOpenAI(
-        temperature=0, stop=["\nObservation"]
+        temperature=0, stop=["\nObservation"], model="gpt-4o-mini"
     )  # the stop parameter is there to ensure the LLM stops once it finds the real result that we are looking for. if this is not supplied, then it will keep generating text and hallucinate
+
+    agent = (
+        {"input": lambda x: x["input"]} | prompt | llm
+    )  # we did that lambda function to make it dynamic. 'input' needs to be in there because it needs to match the template 'input' parameter
+
+    res = agent.invoke({"input": "What is the text length of 'NATE' in characters"})
+
+    print(res)
