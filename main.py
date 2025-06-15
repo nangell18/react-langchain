@@ -1,5 +1,10 @@
+from typing import Union, List
+
 from dotenv import load_dotenv
 from langchain.agents import tool
+from langchain.tools import Tool
+from langchain.agents.output_parsers import ReActSingleInputOutputParser
+from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import render_text_description
 from langchain_openai import ChatOpenAI
@@ -15,6 +20,13 @@ def get_text_length(text: str) -> int:
         " " " "
     )  # stripping any non alphabetic characters just in case
     return len(text)
+
+def find_tool_by_name(tools: List[Tool], tool_name:str) -> Tool:
+    for tool in tools:
+        if tool.name == tool_name:
+            return tool
+    raise ValueError(f"Tool with name {tool_name} not found.")
+
 
 if __name__ == "__main__":
     print("Hello ReAct LangChain!")
@@ -46,16 +58,28 @@ if __name__ == "__main__":
     prompt = PromptTemplate.from_template(template=template).partial(
         tools=render_text_description(tools),
         tool_names=", ".join([t.name for t in tools]),
-    )  # we need the render_text_description because we cannot put tool objects in llm, we need strings of our tools
+    )
 
     llm = ChatOpenAI(
         temperature=0, stop=["\nObservation"], model="gpt-4o-mini"
-    )  # the stop parameter is there to ensure the LLM stops once it finds the real result that we are looking for. if this is not supplied, then it will keep generating text and hallucinate
+    )
 
     agent = (
-        {"input": lambda x: x["input"]} | prompt | llm
-    )  # we did that lambda function to make it dynamic. 'input' needs to be in there because it needs to match the template 'input' parameter
+        {"input": lambda x: x["input"]} | prompt | llm | ReActSingleInputOutputParser()
+            #ReActSingleInputOutputParser is the PARSING step within the ReAct steps framework picture. without the output parsar, we are not able to invoke the actual function because the previous output was one giant string but we need to separate the tool and output. that way here we can call the actual tool
+    )
+    # ^ right above is PARSING step
 
-    res = agent.invoke({"input": "What is the text length of 'NATE' in characters"})
+    agent_step: Union[AgentAction,AgentFinish] = agent.invoke({"input": "What is the length in characters of the text Nate"})
 
-    print(res)
+    print(agent_step)
+
+    #this is the TOOL execution part
+    if isinstance(agent_step,AgentAction):
+        tool_name = agent_step.tool
+        tool_to_use = find_tool_by_name(tools,tool_name)
+        tool_input = agent_step.tool_input
+
+        obervation = tool_to_use.func(str(tool_input))
+
+        print(f"{obervation}=")
